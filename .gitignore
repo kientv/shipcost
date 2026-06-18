@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+venv/
+env/
+.venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Data files (sensitive/large)
+*.xlsx
+BẢNG GIÁ NEWPOST PUPLIC KHÁCH HÀNG.xlsx
+pricing_data.xlsx
+
+# Local config
+.env
+*.local
+
+# Test
+.coverage
+htmlcov/
+.pytest_cache/
