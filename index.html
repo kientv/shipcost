@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ShipCost API - Tra Cước</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 1100px; margin: 0 auto; padding: 20px; background: #f5f6fa; }
+        .card { background: white; border-radius: 12px; padding: 24px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+        h1 { color: #1a1a2e; margin-bottom: 8px; }
+        .subtitle { color: #666; margin-bottom: 24px; }
+        .form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 16px; }
+        .form-group { display: flex; flex-direction: column; }
+        label { font-weight: 600; margin-bottom: 6px; color: #333; font-size: 14px; }
+        select, input, button { padding: 12px 16px; border: 1px solid #ddd; border-radius: 8px; font-size: 15px; }
+        select:focus, input:focus { outline: none; border-color: #4a90d9; box-shadow: 0 0 0 3px rgba(74,144,217,0.15); }
+        button { background: #4a90d9; color: white; border: none; cursor: pointer; font-weight: 600; transition: background 0.2s; }
+        button:hover { background: #357abd; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        .result { margin-top: 20px; padding: 20px; border-radius: 8px; display: none; }
+        .result.success { background: #e8f5e9; border: 1px solid #4caf50; display: block; }
+        .result.error { background: #fdeaea; border: 1px solid #ef5350; display: block; }
+        .result h3 { margin: 0 0 16px; font-size: 18px; }
+        .result.success h3 { color: #2e7d32; }
+        .result.error h3 { color: #c62828; }
+        .rate-info { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+        .rate-item { background: white; padding: 12px; border-radius: 6px; }
+        .rate-label { font-size: 12px; color: #888; text-transform: uppercase; }
+        .rate-value { font-size: 20px; font-weight: 700; color: #1a1a2e; margin-top: 4px; }
+        .rate-value.vnd { color: #4a90d9; }
+        .rate-value.total { color: #2e7d32; font-size: 24px; }
+        .zone-badge { display: inline-block; background: #e3f2fd; color: #1565c0; padding: 4px 12px; border-radius: 20px; font-size: 13px; font-weight: 600; margin-left: 8px; }
+        .api-section { background: #f8f9fa; border-radius: 8px; padding: 16px; margin-top: 20px; }
+        .api-section h4 { margin: 0 0 12px; color: #333; }
+        .api-example { background: #1a1a2e; color: #e0e0e0; padding: 16px; border-radius: 8px; font-family: monospace; font-size: 13px; overflow-x: auto; }
+        .copy-btn { background: #666; font-size: 12px; padding: 6px 12px; margin-top: 8px; }
+        .hidden { display: none; }
+        .loading { opacity: 0.6; pointer-events: none; }
+        .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid #fff; border-radius: 50%; border-top-color: transparent; animation: spin 1s linear infinite; margin-right: 8px; vertical-align: middle; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .service-type-group { display: none; }
+        .section-title { font-size: 16px; font-weight: 600; color: #1a1a2e; margin: 20px 0 12px; padding-bottom: 8px; border-bottom: 1px solid #eee; }
+        .dim-group { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+        .auto-surcharge { background: #f0f7ff; border: 1px solid #d0e6ff; border-radius: 8px; padding: 16px; margin-top: 12px; }
+        .auto-surcharge h4 { margin: 0 0 12px; color: #1565c0; font-size: 14px; }
+        .auto-surcharge .row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #e0efff; font-size: 13px; }
+        .auto-surcharge .row:last-child { border-bottom: none; font-weight: 600; }
+        .auto-surcharge .row.applied { color: #2e7d32; }
+        .auto-surcharge .row.not-applied { color: #999; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>📦 Tra Cước Vận Chuyển</h1>
+        <p class="subtitle">API định giá cho các dòng dịch vụ: CTU, CTQ, DHL, UPS, FedEx</p>
+
+        <form id="pricingForm">
+            <div class="section-title">📋 Thông tin cơ bản</div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Nhà vận chuyển *</label>
+                    <select id="carrier" required>
+                        <option value="">-- Chọn hãng --</option>
+                        <option value="ctu">CTU (Chuyên Tuyến ỦY Thác)</option>
+                        <option value="ctq">CTQ (Chuyên Tuyến)</option>
+                        <option value="dhl_sing">DHL Singapore (DHLS)</option>
+                        <option value="dhl_vietnam">DHL Vietnam (DHLV)</option>
+                        <option value="ups_saver">UPS Saver</option>
+                        <option value="fedex">FedEx International Priority</option>
+                    </select>
+                </div>
+                <div class="form-group service-type-group" id="serviceTypeGroup">
+                    <label>Loại dịch vụ</label>
+                    <select id="serviceType">
+                        <option value="">-- Tự động --</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Trọng lượng (kg) *</label>
+                    <input type="number" id="weight" step="0.5" min="0.5" max="1000" placeholder="Ví dụ: 1.5" required>
+                </div>
+                <div class="form-group">
+                    <label>Điểm đến *</label>
+                    <input type="text" id="destination" placeholder="Ví dụ: Singapore, USA, Japan..." required list="destinations">
+                    <datalist id="destinations"></datalist>
+                </div>
+            </div>
+
+            <div class="section-title">📏 Kích thước (để tính trọng lượng thể tích)</div>
+            <div class="form-row dim-group">
+                <div class="form-group">
+                    <label>Dài (cm)</label>
+                    <input type="number" id="length" step="1" min="1" max="300" placeholder="0">
+                </div>
+                <div class="form-group">
+                    <label>Rộng (cm)</label>
+                    <input type="number" id="width" step="1" min="1" max="200" placeholder="0">
+                </div>
+                <div class="form-group">
+                    <label>Cao (cm)</label>
+                    <input type="number" id="height" step="1" min="1" max="160" placeholder="0">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Trọng lượng thể tích (kg)</label>
+                    <input type="number" id="volumetricWeight" step="0.1" min="0" placeholder="Tự động tính từ L×W×H/5000" readonly>
+                </div>
+            </div>
+
+            <div class="section-title">⚡ Phụ phí (tự động tính theo quy tắc)</div>
+            <!-- Auto-detected surcharges preview -->
+            <div id="autoSurchargePreview" class="auto-surcharge hidden">
+                <h4>🤖 Phụ phí sẽ được áp dụng tự động</h4>
+                <div id="autoSurchargeList"></div>
+            </div>
+
+            <div class="section-title">🏷️ Mặt hàng đặc biệt (Phụ phí HQ - áp dụng CTU/CTQ)</div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Loại mặt hàng</label>
+                    <select id="itemCategory">
+                        <option value="">-- Không áp dụng --</option>
+                        <option value="dong_trung_safaron">Đông trùng, Safaron, Nhang Trầm, bột trầm</option>
+                        <option value="dong_ho_thuong_fake">Đồng hồ thường, Fake thương hiệu (quần áo, túi, kính)</option>
+                        <option value="dong_ho_fake">Đồng hồ Fake cao cấp</option>
+                        <option value="pin_loa_nho">Pin kèm thiết bị, Loa nhỏ cỡ lòng bàn tay</option>
+                        <option value="da_trang_suc_gia">Đá trang sức giả, Hàng mỹ ký</option>
+                        <option value="thuoc_tay_cay_xanh">Thuốc tây, Cây xanh</option>
+                        <option value="thuoc_nam_dong_y">Thuốc nam, đông ý, thuốc bắc, dầu thoa, Mỹ phẩm</option>
+                        <option value="thuoc_nhuom_muc_xam">Thuốc nhuộm, mực xăm</option>
+                        <option value="may_moc_khong_dien_tu">Máy móc không điện tử</option>
+                        <option value="may_moc_co_motor_loa">Máy móc có motor, Loa</option>
+                        <option value="soi_an_ninh_go">Phí Soi An Ninh kiện gỗ</option>
+                        <option value="labubu">Con Labubu</option>
+                        <option value="yen">Hàng yến</option>
+                        <option value="nuoc_hoa_son_mong">Nước hoa, Sơn móng tay</option>
+                        <option value="hun_trung_go">Phí Hun Trùng Hộ Đối Với Hàng Gỗ</option>
+                        <option value="tui_vi_giay_ca_sau">Túi, ví, giày da cá sấu, quần áo thương hiệu</option>
+                        <option value="go_khac">Các loại gỗ khác</option>
+                        <option value="may_anh">Máy ảnh</option>
+                        <option value="thit_trung_mat_ong">Thịt, trứng, mật ong</option>
+                        <option value="chat_long_mam_ruou">Chất lỏng: mắm, syrup, dầu gội, rượu</option>
+                        <option value="tuong_go_da">Tượng Gỗ/Đá</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Số lượng kiện/hộp</label>
+                    <input type="number" id="itemQuantity" step="1" min="1" max="1000" value="1">
+                </div>
+            </div>
+
+            <button type="submit" id="submitBtn">🔍 Tra Cước & Tính Toàn Bộ Chi Phí</button>
+        </form>
+
+        <div id="result" class="result"></div>
+    </div>
+
+    <div class="card api-section">
+        <h4>📚 API cho AI Agent (Function Calling)</h4>
+        <p>Endpoint: <code>POST /api/rate</code></p>
+        <div class="api-example" id="apiExample">{"carrier": "dhl_vietnam", "service_type": "doc", "weight": 1.5, "destination": "Singapore", "length": 30, "width": 20, "height": 15, "fuel_surcharge_pct": 12.5}</div>
+        <button class="copy-btn" onclick="copyApiExample()">📋 Copy Request</button>
+        <p style="margin-top:12px;font-size:13px;color:#666;">
+            <strong>Response có breakdown chi tiết:</strong> base_rate, volumetric_weight, chargeable_weight, surcharges{}, subtotal, vat, total_vnd
+        </p>
+    </div>
+
+    <script>
+        const carrierServiceMap = {
+            "ctu": [{value: "standard", label: "Standard"}],
+            "ctq": [{value: "document", label: "Tài liệu (Document)"}, {value: "non_document", label: "Hàng hóa (Non-Document)"}],
+            "dhl_sing": [{value: "doc", label: "Tài liệu (Document)"}, {value: "non_doc", label: "Hàng hóa (Non-Document)"}],
+            "dhl_vietnam": [{value: "doc", label: "Tài liệu (Document)"}, {value: "non_doc", label: "Hàng hóa (Non-Document)"}],
+            "ups_saver": [{value: "envelope", label: "Thư (Envelope)"}, {value: "document", label: "Tài liệu"}, {value: "parcel", label: "Hàng hóa (Parcel)"}],
+            "fedex": [{value: "envelope", label: "Thư FedEx Envelope"}, {value: "pak", label: "FedEx Pak"}, {value: "ip", label: "International Priority"}],
+        };
+
+        const carrierCountries = {
+            "ctu": ["Trung Quốc", "Thái Lan", "Lào", "Cambodia", "Myanmar", "Ấn Độ", "Singapore", "Hàn Quốc", "Nhật Bản", "Đài Loan", "Úc", "UAE", "Mỹ", "Canada", "New Zealand", "UK", "EU1"],
+            "ctq": ["Hongkong", "Taiwan", "Japan", "Singapore", "China", "KOREA", "INDIA"],
+            "dhl_sing": ["Malaysia (MY)", "Singapore", "China", "Brunei (BN)", "Philippines, The (PH)", "Hong Kong", "Australia (AU)", "New Zealand (NZ)", "Canada (CA)", "Japan", "United Kingdom", "Germany", "France", "Netherlands, The (NL)", "South Korea", "Taiwan", "Thailand", "Vietnam", "India", "Indonesia", "United Arab Emirates", "Saudi Arabia"],
+            "dhl_vietnam": ["Malaysia (MY)", "Singapore", "Macau SAR China (MO)", "Hong Kong", "Taiwan, China", "China (CN) *1", "China (CN) *2", "Australia (AU)", "New Zealand (NZ)", "Japan", "United Kingdom", "Germany", "France", "Netherlands, The (NL)", "South Korea", "Thailand", "Vietnam", "India", "Indonesia", "Philippines, The (PH)", "United Arab Emirates", "Saudi Arabia"],
+            "ups_saver": ["United States*", "Hong Kong SAR, China#", "Taiwan, China*#", "Japan*#", "Singapore#", "Australia*#", "United Kingdom*", "Germany*", "France*", "Canada*", "Korea, South#", "China Mainland (Excluding Southern China Mainland)*#", "India*", "Malaysia*#", "Philippines*#", "Indonesia*#", "Vietnam*"],
+            "fedex": ["U.S.A.", "Japan", "Hong Kong SAR, China", "Singapore", "Taiwan", "China (Excluding China South)", "China (South)", "Korea, South", "Australia", "United Kingdom (Great Britain)", "Germany", "France", "Canada", "India", "Indonesia", "Philippines", "Vietnam", "United Arab Emirates", "Saudi Arabia"]
+        };
+
+        const carrierInput = document.getElementById('carrier');
+        const serviceTypeGroup = document.getElementById('serviceTypeGroup');
+        const serviceTypeSelect = document.getElementById('serviceType');
+        const destinationInput = document.getElementById('destination');
+        const destinationsDatalist = document.getElementById('destinations');
+        const form = document.getElementById('pricingForm');
+        const resultDiv = document.getElementById('result');
+        const submitBtn = document.getElementById('submitBtn');
+        const apiExample = document.getElementById('apiExample');
+        const lengthInput = document.getElementById('length');
+        const widthInput = document.getElementById('width');
+        const heightInput = document.getElementById('height');
+        const volumetricInput = document.getElementById('volumetricWeight');
+        const autoSurchargePreview = document.getElementById('autoSurchargePreview');
+        const autoSurchargeList = document.getElementById('autoSurchargeList');
+
+        carrierInput.addEventListener('change', updateForm);
+        form.addEventListener('submit', handleSubmit);
+        [lengthInput, widthInput, heightInput].forEach(input => input.addEventListener('input', calcVolumetric));
+
+        function calcVolumetric() {
+            const l = parseFloat(lengthInput.value) || 0;
+            const w = parseFloat(widthInput.value) || 0;
+            const h = parseFloat(heightInput.value) || 0;
+            if (l > 0 && w > 0 && h > 0) {
+                const vol = (l * w * h) / 5000;
+                volumetricInput.value = vol.toFixed(2);
+            } else {
+                volumetricInput.value = '';
+            }
+        }
+
+        // Auto-detect surcharges based on rules (preview only)
+        function detectSurcharges(carrier, weight, destination, length, width, height) {
+            const surcharges = [];
+            const volumetric = (length && width && height) ? (length * width * height) / 5000 : 0;
+            const chargeable = Math.max(weight, volumetric);
+            
+            // Overweight > 70kg
+            if (chargeable > 70) {
+                surcharges.push({key: 'oversize_weight', label: 'Kiện quá trọng >70kg', rate: '2,435,000 VND/kiện', applied: true});
+            }
+            
+            // Oversize > 100cm any dimension
+            if (length > 100 || width > 100 || height > 100) {
+                surcharges.push({key: 'oversize_dim', label: 'Kiện quá khổ >100cm', rate: '545,000 VND/kiện', applied: true});
+            }
+            
+            // Non-standard if volumetric > 1.5x actual weight
+            if (volumetric > weight * 1.5) {
+                surcharges.push({key: 'non_standard', label: 'Hàng không theo tiêu chuẩn (khổ lớn)', rate: '545,000 VND/kiện', applied: true});
+            }
+
+            // Zone-based surcharges (need API to determine zone)
+            const zoneBased = {
+                'remote_area': 'Vùng sâu vùng xa (13k/kg, min 600k)',
+                'high_risk_area': 'Vùng rủi ro cao/khủng bố (770k)',
+                'restricted_area': 'Điểm đến bị hạn chế/embargo (750k)',
+                'address_correction': 'Điều chỉnh địa chỉ (300k)',
+                'peak_surcharge': 'Mùa cao điểm (theo bảng DHL)'
+            };
+            
+            for (const [key, label] of Object.entries(zoneBased)) {
+                surcharges.push({key, label, rate: 'Tự động theo zone (xác định khi tra]', applied: false, pending: true});
+            }
+
+            return surcharges;
+        }
+
+        function renderAutoSurcharges(carrier, weight, destination) {
+            const length = parseFloat(lengthInput.value) || 0;
+            const width = parseFloat(widthInput.value) || 0;
+            const height = parseFloat(heightInput.value) || 0;
+            
+            const surcharges = detectSurcharges(carrier, weight, destination, length, width, height);
+            
+            let html = '';
+            surcharges.forEach(s => {
+                const cls = s.applied ? 'applied' : (s.pending ? 'not-applied' : 'not-applied');
+                const icon = s.applied ? '✅' : (s.pending ? '⏳' : '❌');
+                html += `<div class="row ${cls}">${icon} ${s.label}: ${s.rate}</div>`;
+            });
+            
+            autoSurchargeList.innerHTML = html || '<div class="row not-applied">Không có phụ phí tự động</div>';
+            autoSurchargePreview.classList.remove('hidden');
+        }
+
+        function updateForm() {
+            const carrier = carrierInput.value;
+            const services = carrierServiceMap[carrier] || [];
+
+            serviceTypeSelect.innerHTML = '<option value="">-- Tự động --</option>';
+            services.forEach(s => {
+                const opt = document.createElement('option');
+                opt.value = s.value;
+                opt.textContent = s.label;
+                serviceTypeSelect.appendChild(opt);
+            });
+
+            if (services.length > 0) serviceTypeGroup.style.display = 'block';
+            else serviceTypeGroup.style.display = 'none';
+
+            destinationsDatalist.innerHTML = '';
+            (carrierCountries[carrier] || []).forEach(c => {
+                const opt = document.createElement('option');
+                opt.value = c;
+                destinationsDatalist.appendChild(opt);
+            });
+
+            // API example
+            const examples = {
+                'dhl_vietnam': '{"carrier": "dhl_vietnam", "service_type": "doc", "weight": 1.5, "destination": "Singapore", "length": 30, "width": 20, "height": 15, "fuel_surcharge_pct": 12.5}',
+                'ctu': '{"carrier": "ctu", "service_type": "standard", "weight": 2, "destination": "Singapore", "item_category": "nuoc_hoa_son_mong", "item_quantity": 3}',
+                'ups_saver': '{"carrier": "ups_saver", "service_type": "parcel", "weight": 1, "destination": "United States", "saturday_delivery": true}',
+                'fedex': '{"carrier": "fedex", "service_type": "ip", "weight": 0.5, "destination": "Japan", "address_correction": true}',
+                'ctq': '{"carrier": "ctq", "service_type": "document", "weight": 1, "destination": "Japan"}',
+                'dhl_sing': '{"carrier": "dhl_sing", "service_type": "non_doc", "weight": 2, "destination": "Malaysia", "length": 120, "width": 30, "height": 20}'
+            };
+            apiExample.textContent = examples[carrier] || '';
+
+            // Update auto surcharge preview
+            const weight = parseFloat(document.getElementById('weight').value) || 0;
+            const destination = destinationInput.value.trim();
+            if (carrier && weight && destination) {
+                renderAutoSurcharges(carrier, weight, destination);
+            }
+        }
+
+        // Update preview when weight/destination/dimensions change
+        document.getElementById('weight').addEventListener('input', () => {
+            const carrier = carrierInput.value;
+            const weight = parseFloat(document.getElementById('weight').value) || 0;
+            const destination = destinationInput.value.trim();
+            if (carrier && weight && destination) renderAutoSurcharges(carrier, weight, destination);
+        });
+        destinationInput.addEventListener('input', () => {
+            const carrier = carrierInput.value;
+            const weight = parseFloat(document.getElementById('weight').value) || 0;
+            const destination = destinationInput.value.trim();
+            if (carrier && weight && destination) renderAutoSurcharges(carrier, weight, destination);
+        });
+
+        async function handleSubmit(e) {
+            e.preventDefault();
+            const carrier = carrierInput.value;
+            const serviceType = serviceTypeSelect.value || undefined;
+            const weight = parseFloat(document.getElementById('weight').value);
+            const destination = destinationInput.value.trim();
+
+            if (!carrier || !weight || !destination) {
+                alert('Vui lòng điền đầy đủ thông tin bắt buộc');
+                return;
+            }
+
+            // Build request
+            const request = {
+                carrier,
+                service_type: serviceType,
+                weight,
+                destination,
+                length: parseFloat(lengthInput.value) || null,
+                width: parseFloat(widthInput.value) || null,
+                height: parseFloat(heightInput.value) || null,
+                volumetric_weight: parseFloat(volumetricInput.value) || null,
+                // Surcharges auto-detected by API based on zone/weight/dimensions
+                item_category: document.getElementById('itemCategory').value || null,
+                item_quantity: parseInt(document.getElementById('itemQuantity').value) || 1,
+            };
+
+            // Remove null values
+            Object.keys(request).forEach(k => request[k] === null && delete request[k]);
+
+            setLoading(true);
+            resultDiv.className = 'result';
+            resultDiv.innerHTML = '';
+
+            try {
+                const response = await fetch('/api/rate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(request)
+                });
+                
+                let data;
+                try {
+                    data = await response.json();
+                } catch (parseErr) {
+                    throw new Error('Invalid response from server');
+                }
+                
+                if (!response.ok) {
+                    throw new Error(data.detail || data.message || `HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                renderResult(data);
+            } catch (err) {
+                console.error('Error:', err);
+                if (err instanceof TypeError && err.message.includes('fetch')) {
+                    renderResult({ found: false, message: 'Lỗi kết nối: Không thể kết nối đến server. Vui lòng kiểm tra server đang chạy tại http://localhost:8000' });
+                } else {
+                    renderResult({ found: false, message: err.message });
+                }
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        function setLoading(loading) {
+            submitBtn.disabled = loading;
+            submitBtn.innerHTML = loading ? '<span class="spinner"></span>Đang tính...' : '🔍 Tra Cước & Tính Toàn Bộ Chi Phí';
+            form.classList.toggle('loading', loading);
+        }
+
+        function renderResult(data) {
+            if (data.found) {
+                resultDiv.className = 'result success';
+                let html = `<h3>✅ Tìm thấy cước phí</h3>
+                    <div class="rate-info">
+                        <div class="rate-item">
+                            <div class="rate-label">Nhà vận chuyển</div>
+                            <div class="rate-value">${getCarrierName(data.carrier)}</div>
+                        </div>
+                        <div class="rate-item">
+                            <div class="rate-label">Loại dịch vụ</div>
+                            <div class="rate-value">${getServiceLabel(data.carrier, data.service_type)}</div>
+                        </div>
+                        <div class="rate-item">
+                            <div class="rate-label">Trọng lượng thực</div>
+                            <div class="rate-value">${data.weight} kg</div>
+                        </div>`;
+                
+                if (data.volumetric_weight) {
+                    html += `<div class="rate-item">
+                        <div class="rate-label">Trọng lượng thể tích</div>
+                        <div class="rate-value">${data.volumetric_weight} kg</div>
+                    </div>`;
+                }
+                if (data.chargeable_weight) {
+                    html += `<div class="rate-item">
+                        <div class="rate-label">Trọng lượng cước</div>
+                        <div class="rate-value">${data.chargeable_weight} kg</div>
+                    </div>`;
+                }
+                
+                html += `<div class="rate-item">
+                    <div class="rate-label">Điểm đến</div>
+                    <div class="rate-value">${data.destination}${data.zone ? ' <span class="zone-badge">' + data.zone + '</span>' : ''}</div>
+                </div>`;
+                
+                // Breakdown
+                if (data.base_rate !== undefined && data.base_rate !== null) {
+                    html += `<div class="rate-item" style="grid-column: 1/-1;">
+                        <div class="rate-label">📊 CHI TIẾT CHI PHÍ</div>
+                    </div>
+                    <div class="rate-item">
+                        <div class="rate-label">Cước cơ bản</div>
+                        <div class="rate-value vnd">${formatVND(data.base_rate)}</div>
+                    </div>`;
+                    
+                    if (data.surcharges && Object.keys(data.surcharges).length > 0) {
+                        Object.entries(data.surcharges).forEach(([key, val]) => {
+                            const label = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                            html += `<div class="rate-item">
+                                <div class="rate-label">+ ${label}</div>
+                                <div class="rate-value vnd">${formatVND(val)}</div>
+                            </div>`;
+                        });
+                    }
+                    
+                    if (data.subtotal !== undefined) {
+                        html += `<div class="rate-item">
+                            <div class="rate-label">Tạm tính</div>
+                            <div class="rate-value vnd">${formatVND(data.subtotal)}</div>
+                        </div>`;
+                    }
+                    if (data.vat !== undefined) {
+                        html += `<div class="rate-item">
+                            <div class="rate-label">VAT (10%)</div>
+                            <div class="rate-value vnd">${formatVND(data.vat)}</div>
+                        </div>`;
+                    }
+                    if (data.total_vnd !== undefined) {
+                        html += `<div class="rate-item" style="grid-column: 1/-1;">
+                            <div class="rate-label">TỔNG CỘNG</div>
+                            <div class="rate-value total">${formatVND(data.total_vnd)}</div>
+                        </div>`;
+                    }
+                } else if (data.rate_vnd) {
+                    html += `<div class="rate-item">
+                        <div class="rate-label">Cước phí (VNĐ)</div>
+                        <div class="rate-value vnd">${formatVND(data.rate_vnd)}</div>
+                    </div>`;
+                }
+                
+                if (data.transit_time) {
+                    html += `<div class="rate-item">
+                        <div class="rate-label">Thời gian chuyển phát</div>
+                        <div class="rate-value">${data.transit_time}</div>
+                    </div>`;
+                }
+                if (data.message) {
+                    html += `<div class="rate-item" style="grid-column: 1/-1;">
+                        <div class="rate-label">Ghi chú</div>
+                        <div class="rate-value" style="font-size:14px;font-weight:400;color:#666;">${data.message}</div>
+                    </div>`;
+                }
+                html += `</div>`;
+                resultDiv.innerHTML = html;
+            } else {
+                resultDiv.className = 'result error';
+                resultDiv.innerHTML = `<h3>❌ Không tìm thấy cước phí</h3><p>${data.message || 'Không có dữ liệu cho thông số này'}</p>`;
+            }
+        }
+
+        function getCarrierName(id) {
+            const names = {
+                'ctu': 'CTU (Chuyên Tuyến ỦY Thác)',
+                'ctq': 'CTQ (Chuyên Tuyến)',
+                'dhl_sing': 'DHL Singapore (DHLS)',
+                'dhl_vietnam': 'DHL Vietnam (DHLV)',
+                'ups_saver': 'UPS Saver',
+                'fedex': 'FedEx International Priority'
+            };
+            return names[id] || id;
+        }
+
+        function getServiceLabel(carrier, type) {
+            const map = carrierServiceMap[carrier] || [];
+            const found = map.find(s => s.value === type);
+            return found ? found.label : type;
+        }
+
+        function formatVND(num) {
+            if (num === null || num === undefined) return 'N/A';
+            return new Intl.NumberFormat('vi-VN').format(Math.round(num)) + ' VNĐ';
+        }
+
+        function copyApiExample() {
+            navigator.clipboard.writeText(apiExample.textContent).then(() => {
+                const btn = document.querySelector('.copy-btn');
+                const orig = btn.textContent;
+                btn.textContent = '✅ Copied!';
+                setTimeout(() => btn.textContent = orig, 1500);
+            });
+        }
+
+        updateForm();
+    </script>
+</body>
+</html>
