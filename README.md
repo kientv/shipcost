@@ -117,16 +117,17 @@ Content-Type: application/json
 
 ---
 
-## Cập nhật dữ liệu từ Excel
+## Cập nhật dữ liệu giá
 
-Khi file Excel thay đổi:
+Khi dữ liệu giá thay đổi, chỉ cần cập nhật file `pricing_data.json`:
 
 ```bash
+# Cập nhật trực tiếp file JSON hoặc chạy script extract từ Excel
 python extract_pricing.py  # Đọc Excel → ghi pricing_data.json
 python api_server.py       # Restart server để load dữ liệu mới
 ```
 
-File nguồn: `BẢNG GIÁ NEWPOST PUPLIC KHÁCH HÀNG.xlsx` (file gốc, không commit lên repo)
+File dữ liệu: `pricing_data.json` (đã extract từ Excel gốc)
 
 ---
 
@@ -137,7 +138,6 @@ shipcost/
 ├── index.html             # Web form
 ├── extract_pricing.py     # Script extract Excel → JSON
 ├── pricing_data.json      # Dữ liệu giá (1.2MB)
-├── pricing_data.xlsx      # File Excel gốc (không commit)
 ├── PROJECT_SUMMARY.md     # Tóm tắt dự án
 └── README.md              # File này
 ```

@@ -85,6 +85,50 @@ class ZoneLookupResponse(BaseModel):
     found: bool
 
 # ===== Helper Functions =====
+def parse_rate(rate_str: str) -> float:
+    """Parse rate string like '770,000 VND/lô hàng' to float 770000"""
+    import re
+    if not rate_str:
+        return 0.0
+    rate_str = str(rate_str)
+    # Extract first number from string
+    nums = re.findall(r'[\d.,]+', rate_str.replace(',', ''))
+    if nums:
+        return float(nums[0])
+    return 0.0
+
+def get_surcharge_config(carrier: str) -> dict:
+    """Get surcharge configuration from pricing data"""
+    # DHL surcharges
+    if carrier in ["dhl_sing", "dhl_vietnam"]:
+        surcharges = PRICING_DATA.get("surcharge_dhl_vietnam", [])
+        config = {}
+        for s in surcharges:
+            stype = s.get("type", "").lower()
+            rate_str = s.get("rate", "")
+            note = s.get("note", "")
+            config[stype] = {"rate": rate_str, "amount": parse_rate(rate_str), "note": note}
+        return config
+    # UPS surcharges
+    if carrier == "ups_saver":
+        surcharges = PRICING_DATA.get("ups_surcharge", [])
+        config = {}
+        for s in surcharges:
+            stype = s.get("type", "").lower()
+            rate_str = s.get("rate", "")
+            config[stype] = {"rate": rate_str, "amount": parse_rate(rate_str)}
+        return config
+    # HQ surcharges
+    if carrier in ["ctu", "ctq"]:
+        surcharges = PRICING_DATA.get("surcharge_hq", [])
+        config = {}
+        for s in surcharges:
+            item = s.get("item", "").lower()
+            rate_str = s.get("rate", "")
+            config[item] = {"rate": rate_str, "amount": parse_rate(rate_str), "note": s.get("note", "")}
+        return config
+    return {}
+
 def get_zone(carrier: str, destination: str) -> Optional[int]:
     """Get zone number for a destination"""
     zone_map = {
@@ -184,9 +228,12 @@ def calculate_volumetric_weight(length: float, width: float, height: float) -> f
 
 
 def calculate_surcharges(carrier: str, query: RateQuery, base_rate: float, chargeable_weight: float, zone: int = None, matched_country: str = None, dimensions: dict = None) -> dict:
-    """Calculate all applicable surcharges - auto-detect from rules"""
+    """Calculate all applicable surcharges - auto-detect from rules and JSON config"""
     surcharges = {}
     surcharge_details = {}
+    
+    # Get surcharge config from JSON
+    surcharge_config = get_surcharge_config(carrier)
     
     # Fuel surcharge (user-provided)
     if query.fuel_surcharge_pct and query.fuel_surcharge_pct > 0:
@@ -202,13 +249,13 @@ def calculate_surcharges(carrier: str, query: RateQuery, base_rate: float, charg
     # Auto-detect surcharges for all carriers
     # Overweight > 70kg
     if chargeable_weight > 70:
-        overweight_amt = 2435000
+        overweight_amt = surcharge_config.get("phụ phí kiện hàng quá trọng", {}).get("amount", 2435000)
         surcharges["oversize_weight"] = overweight_amt
         surcharge_details["oversize_weight"] = {"rate": "2,435,000 VND/kiện (>70kg)", "amount": overweight_amt, "auto": True}
     
     # Oversize > 100cm any dimension
     if length and length > 100 or width and width > 100 or height and height > 100:
-        oversize_amt = 545000
+        oversize_amt = surcharge_config.get("phụ phí kiện hàng quá khổ", {}).get("amount", 545000)
         surcharges["oversize_dim"] = oversize_amt
         surcharge_details["oversize_dim"] = {"rate": "545,000 VND/kiện (>100cm)", "amount": oversize_amt, "auto": True}
     
@@ -216,29 +263,37 @@ def calculate_surcharges(carrier: str, query: RateQuery, base_rate: float, charg
     if dimensions and length and width and height:
         volumetric = (length * width * height) / 5000.0
         if volumetric > chargeable_weight * 1.5:
-            nonstd_amt = 545000
+            nonstd_amt = surcharge_config.get("phụ phí hàng hóa không theo tiêu chuẩn", {}).get("amount", 545000)
             surcharges["non_standard"] = nonstd_amt
             surcharge_details["non_standard"] = {"rate": "545,000 VND/kiện (khổ lớn)", "amount": nonstd_amt, "auto": True}
     
     # Zone-based surcharges (auto-detect from zone)
     if carrier in ["dhl_sing", "dhl_vietnam"] and zone is not None:
-        # Remote area surcharge
+        # Remote area surcharge - read from JSON
+        remote_config = surcharge_config.get("phụ phí vùng sâu vùng xa", {})
+        remote_rate_per_kg = remote_config.get("per_kg", 13000)
+        remote_min = remote_config.get("min_amount", 600000)
         if is_remote_zone(carrier, zone):
-            remote_amt = max(chargeable_weight * 13000, 600000)
+            remote_amt = max(chargeable_weight * remote_rate_per_kg, remote_min)
             surcharges["remote_area"] = remote_amt
-            surcharge_details["remote_area"] = {"rate": "13,000 VND/kg (min 600,000) - Tự động theo zone", "amount": remote_amt, "auto": True}
+            surcharge_details["remote_area"] = {"rate": f"{remote_rate_per_kg} VND/kg (min {remote_min}) - Tự động theo zone", "amount": remote_amt, "auto": True}
         
         # High risk area
         if matched_country and is_high_risk_zone(carrier, zone, matched_country):
-            high_risk_amt = 770000
+            high_risk_amt = surcharge_config.get("phụ phí an ninh – rủi ro cao", {}).get("amount", 770000)
             surcharges["high_risk"] = high_risk_amt
             surcharge_details["high_risk"] = {"rate": "770,000 VND/lô hàng - Tự động theo quốc gia", "amount": high_risk_amt, "auto": True}
         
         # Restricted area
         if matched_country and is_restricted_zone(carrier, zone, matched_country):
-            restricted_amt = 750000
+            restricted_amt = surcharge_config.get("phụ phí an ninh – điểm đến bị hạn chế", {}).get("amount", 750000)
             surcharges["restricted_area"] = restricted_amt
             surcharge_details["restricted_area"] = {"rate": "750,000 VND/lô hàng - Tự động theo quốc gia", "amount": restricted_amt, "auto": True}
+        
+        # Address correction surcharge
+        addr_amt = surcharge_config.get("phụ phí điều chỉnh địa chỉ", {}).get("amount", 300000)
+        surcharges["address_correction"] = addr_amt
+        surcharge_details["address_correction"] = {"rate": "300,000 VND/lô hàng", "amount": addr_amt, "auto": True}
         
         # Peak surcharge (flag only - varies by season)
         surcharges["peak_surcharge"] = 0
@@ -246,82 +301,86 @@ def calculate_surcharges(carrier: str, query: RateQuery, base_rate: float, charg
     
     # UPS surcharges
     if carrier == "ups_saver":
-        # Saturday delivery (user option - keep as manual)
+        # Saturday delivery (user option)
         if query.saturday_delivery:
-            sat_amt = 258500
+            sat_amt = surcharge_config.get("phụ phí giao hàng vào ngày thứ bảy", {}).get("amount", 258500)
             surcharges["saturday_delivery"] = sat_amt
             surcharge_details["saturday_delivery"] = {"rate": "258,500 VND/lô hàng", "amount": sat_amt}
         
         # Customs payment (user option)
         if query.customs_payment:
-            customs_amt = 600425
+            customs_amt = surcharge_config.get("phụ phí chuyển thuế hải quan", {}).get("amount", 600425)
             surcharges["customs_payment"] = customs_amt
             surcharge_details["customs_payment"] = {"rate": "600,425 VND/lô hàng", "amount": customs_amt}
         
         # Max limit exceeded
         if query.max_limit_exceeded:
-            max_amt = 6580000
+            max_amt = surcharge_config.get("phí vượt quá giới hạn tối đa", {}).get("amount", 6580000)
             surcharges["max_limit_exceeded"] = max_amt
             surcharge_details["max_limit_exceeded"] = {"rate": "6,580,000 VND/kiện", "amount": max_amt}
+        
+        # Overweight (same as DHL)
+        if chargeable_weight > 70:
+            overweight_amt = surcharge_config.get("phụ phí kiện hàng quá trọng (ups)", {}).get("amount", 2435000)
+            surcharges["oversize_weight"] = overweight_amt
+            surcharge_details["oversize_weight"] = {"rate": "2,435,000 VND/kiện (>70kg)", "amount": overweight_amt, "auto": True}
+        
+        # Oversize
+        if length and length > 100 or width and width > 100 or height and height > 100:
+            oversize_amt = surcharge_config.get("phụ phí kiện hàng quá khổ (ups)", {}).get("amount", 545000)
+            surcharges["oversize_dim"] = oversize_amt
+            surcharge_details["oversize_dim"] = {"rate": "545,000 VND/kiện (>100cm)", "amount": oversize_amt, "auto": True}
     
     # FedEx surcharges
     if carrier == "fedex":
-        # Remote area (UPS/FedEx varies by destination)
+        # Remote area
         if query.remote_area:
             surcharges["remote_area"] = 0
             surcharge_details["remote_area"] = {"rate": "Tùy điểm đến", "amount": 0}
-        
-        # Address correction (user option)
+        # Address correction
         if query.address_correction:
-            addr_amt = 300000
+            addr_amt = surcharge_config.get("phụ phí điều chỉnh địa chỉ", {}).get("amount", 300000)
             surcharges["address_correction"] = addr_amt
             surcharge_details["address_correction"] = {"rate": "300,000 VND/lô hàng", "amount": addr_amt}
     
     # HQ special item surcharges (applies to CTU/CTQ) - user selected
     if carrier in ["ctu", "ctq"] and query.item_category:
-        category_surcharges = {
-            "dong_trung_safaron": ("150,000/kg", lambda w: w * 150000),
-            "dong_ho_thuong_fake": ("50,000/chiếc or 50,000/kg", lambda w: max(50000, w * 50000)),
-            "dong_ho_fake": ("100,000/cái", lambda w: 100000),
-            "pin_loa_nho": ("300,000-700,000/kiện", lambda w: 300000 if w <= 5 else (500000 if w <= 22 else 700000)),
-            "da_trang_suc_gia": ("200,000-300,000/kg", lambda w: w * 250000),
-            "thuoc_tay_cay_xanh": ("200,000/kg", lambda w: w * 200000),
-            "thuoc_nam_dong_y": ("30,000/kg", lambda w: w * 30000),
-            "thuoc_nhuom_muc_xam": ("300,000/kiện", lambda w: 300000),
-            "may_moc_khong_dien_tu": ("10,000/kg", lambda w: w * 10000),
-            "may_moc_co_motor_loa": ("500,000-1,000,000/máy", lambda w: 500000),
-            "soi_an_ninh_go": ("100,000/kiện", lambda w: 100000),
-            "labubu": ("50,000-500,000/con", lambda w: 50000),
-            "yen": ("350,000/kg", lambda w: w * 350000),
-            "nuoc_hoa_son_mong": ("300,000-700,000/kiện + 50,000/chai", lambda w: 300000 + 50000),
-            "hun_trung_go": ("550,000/lô hàng", lambda w: 550000),
-            "tui_vi_giay_ca_sau": ("100,000/cái", lambda w: 100000),
-            "go_khac": ("20,000/kg", lambda w: w * 20000),
-            "may_anh": ("200,000/máy", lambda w: 200000),
-            "thit_trung_mat_ong": ("10,000/kg", lambda w: w * 10000),
-            "chat_long_mam_ruou": ("100,000-300,000/kiện", lambda w: 100000),
-            "tuong_go_da": ("300,000/tượng", lambda w: 300000),
-        }
-        
-        cat_key = query.item_category.lower().replace(' ', '_').replace(',', '').replace('(', '').replace(')', '')
-        for key, (rate_str, calc_fn) in category_surcharges.items():
-            if key in cat_key or cat_key in key:
-                amt = calc_fn(chargeable_weight) * query.item_quantity
-                surcharges[f"hq_{key}"] = amt
-                surcharge_details[f"hq_{key}"] = {"rate": rate_str, "amount": amt}
-                break
-    
+        hq_config = get_surcharge_config(carrier)
+        import unicodedata
+        def strip_accents(text: str) -> str:
+            """Remove diacritics from text"""
+            nfkd = unicodedata.normalize('NFD', text)
+            return ''.join(c for c in nfkd if not unicodedata.combining(c))
+
+        cat_key = query.item_category.lower().replace(' ', '_')
+        for item, cfg in hq_config.items():
+            item_lower = item.lower()
+            # Flexible matching: check if query words are in item name
+            query_parts = query.item_category.lower().split('_')
+            if len(query_parts) >= 2:
+                item_no_accents = ''.join(c for c in unicodedata.normalize('NFD', item.lower()) if not unicodedata.combining(c))
+                if all(part in item_no_accents for part in query.item_category.lower().split('_') if len(part) > 1):
+                    # Calculate amount based on rate string
+                    rate_str = cfg.get("rate", "")
+                    amount = cfg.get("amount", 0)
+                    if "kg" in cfg.get("rate", "") and "/" in cfg.get("rate", ""):
+                        # Per kg rate
+                        import re
+                        nums = re.findall(r'[\d.,]+', cfg.get("rate", "").replace(',', ''))
+                        if nums:
+                            per_kg = float(nums[0])
+                            amount = per_kg * chargeable_weight * query.item_quantity
+                        else:
+                            amount = cfg.get("amount", 0) * query.item_quantity
+                    elif any(kw in cfg.get("rate", "") for kw in ["cái", "chiếc", "con", "tượng", "máy", "kiện"]):
+                        amount = cfg.get("amount", 0) * query.item_quantity
+                    else:
+                        amount = cfg.get("amount", 0) * query.item_quantity
+                    
+                    surcharges[f"hq_{item.replace(' ', '_')}"] = amount
+                    surcharge_details[f"hq_{item.replace(' ', '_')}"] = {"rate": cfg.get("rate", ""), "amount": amount}
+                    break
     return {"surcharges": surcharges, "details": surcharge_details}
-
-
-def calculate_vat(amount: float, vat_rate: float = 0.1) -> float:
-    """Calculate VAT (10% default)"""
-    return amount * vat_rate
-
-# ===== API Endpoints =====
-@app.get("/")
-async def root():
-    return FileResponse("index.html")
 
 @app.get("/api/health")
 async def health():
@@ -608,6 +667,23 @@ async def list_countries(carrier: str):
         }
         zones = zone_map.get(carrier, {})
         return {"carrier": carrier, "zone_map": zones}
+
+def calculate_vat(amount: float, vat_rate: float = 0.1) -> float:
+    """Calculate VAT (10% default)"""
+    return amount * vat_rate
+
+@app.get("/")
+async def root():
+    return FileResponse("index.html")
+
+# ===== Run =====
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+
+@app.get("/")
+async def root():
+    return FileResponse("index.html")
 
 # ===== Run =====
 if __name__ == "__main__":

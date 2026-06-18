@@ -172,10 +172,35 @@ surcharge_dhlv = []
 for row in ws.iter_rows(min_row=9, max_row=ws.max_row, values_only=True):
     vals = [clean(c) for c in row]
     if len(vals) >= 3 and vals[0] and vals[1]:
+        stype = vals[0]
+        srate = vals[1]
+        # Parse rate to extract per_kg and min_amount for auto-calculation
+        def parse_rate_details(rate_str):
+            if not rate_str:
+                return {}
+            import re
+            result = {"rate": rate_str}
+            # Extract numbers
+            nums = re.findall(r'[\d.,]+', rate_str.replace(',', ''))
+            nums_float = [float(n) for n in nums] if nums else []
+            
+            # Check for "per kg" pattern
+            if 'kg' in rate_str.lower() and ('/' in rate_str or 'mỗi' in rate_str.lower()):
+                if len(nums_float) >= 1:
+                    result["per_kg"] = nums_float[0]
+            # Check for "min" or "tối thiểu" pattern
+            if 'tối thiểu' in rate_str.lower() or 'min' in rate_str.lower():
+                if len(nums_float) >= 2:
+                    result["min_amount"] = nums_float[1]
+                elif len(nums_float) == 1:
+                    result["min_amount"] = nums_float[0]
+            return result
+        
         surcharge_dhlv.append({
-            "type": vals[0],
-            "rate": vals[1],
-            "note": vals[2] if len(vals) > 2 else ""
+            "type": stype,
+            "rate": srate,
+            "note": vals[2] if len(vals) > 2 else "",
+            **parse_rate_details(srate)
         })
 output["surcharge_dhl_vietnam"] = surcharge_dhlv
 
