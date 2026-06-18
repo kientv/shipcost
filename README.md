@@ -2,6 +2,12 @@
 
 Hệ thống tra cước vận chuyển đa hãng: **CTU, CTQ, DHL Singapore, DHL Vietnam, UPS Saver, FedEx**
 
+## Demo
+
+| Form tra cước | Kết quả |
+|--------------|---------|
+| ![Form](form.png) | ![Result](result.png) |
+
 ## Tính năng
 
 - ✅ **Web Form** - Tra cước thủ công tại `http://localhost:8000`
