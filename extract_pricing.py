@@ -25,7 +25,7 @@ def to_float(val):
     except:
         return None
 
-wb = openpyxl.load_workbook('BẢNG GIÁ NEWPOST PUPLIC KHÁCH HÀNG.xlsx', data_only=True)
+wb = openpyxl.load_workbook('example.xlsx', data_only=True)
 
 output = {}
 
