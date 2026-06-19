@@ -122,12 +122,11 @@ Content-Type: application/json
 Khi dữ liệu giá thay đổi, chỉ cần cập nhật file `pricing_data.json`:
 
 ```bash
-# Cập nhật trực tiếp file JSON hoặc chạy script extract từ Excel
-python extract_pricing.py  # Đọc Excel → ghi pricing_data.json
+# Cập nhật trực tiếp file JSON
 python api_server.py       # Restart server để load dữ liệu mới
 ```
 
-File dữ liệu: `pricing_data.json` (đã extract từ Excel gốc)
+File dữ liệu: `pricing_data.json`
 
 ---
 
