@@ -9,10 +9,11 @@ A complete multi-carrier pricing API system built from Excel price tables, featu
 ## Files Created
 ```
 /Users/kientv/Workspace/Sale/newport/
-├── extract_pricing.py      # Python script to extract Excel → JSON (if you have Excel source)
+├── extract_pricing.py      # Python script to extract Excel → JSON
 ├── pricing_data.json       # All pricing data (1.2MB, 13 sheets)
 ├── api_server.py           # FastAPI server with 6 endpoints
 ├── index.html              # Web form for manual lookups
+├── example.xlsx            # Example Excel template (not committed)
 └── PROJECT_SUMMARY.md      # This documentation
 ```
 

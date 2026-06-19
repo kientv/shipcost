@@ -123,6 +123,7 @@ Khi dữ liệu giá thay đổi, chỉ cần cập nhật file `pricing_data.js
 
 ```bash
 # Cập nhật trực tiếp file JSON
+# python extract_pricing.py example.xlsx  # Nếu có file Excel nguồn
 python api_server.py       # Restart server để load dữ liệu mới
 ```
 
